@@ -1,0 +1,54 @@
+# no_build variant — deploy with:  cp config.nobuild.yaml config.yaml && truss push .
+#
+# no_build skips Truss's entire in-container proxy layer (nginx + supervisord +
+# a second uv-managed Python). The generated Dockerfile is just:
+#     FROM <base> ; COPY ./data /app/data ; ENTRYPOINT runs start_command
+# Your binary is the only process and the entrypoint. Baseten's own infra does
+# the request routing (1:1, no path remapping) and hits readiness/liveness
+# directly on server_port. Measured cold start: 2.9s warm-node vs 5.3s for the
+# proxy build (config.yaml). See README "no_build" section.
+#
+# Tradeoffs vs config.yaml:
+#  - build_commands are IGNORED -> binary must be pre-staged in data/ and made
+#    executable in start_command (chmod +x ... && exec ...).
+#  - predict_endpoint remapping is gone (1:1 routing); the server must expose the
+#    OpenAI paths and own /health directly (it does).
+#  - server_port must NOT be 8080.
+#  - Baseten's push-time validation requires the base image to CONTAIN PYTHON
+#    (a platform check, separate from Truss' fail_fast which no_build skips). Verified
+#    by probing: python:3.13-slim-bookworm (51MB) and python:3.13-alpine (22MB) are
+#    accepted; debian:bookworm-slim and busybox:musl are rejected ("Custom base images
+#    not supported…" — really "no Python in this base"). The gate keys on Python, not
+#    Debian, so python:3.13-alpine is the smallest accepted base (our static musl binary
+#    runs natively on Alpine). A true scratch/busybox image (~2MB) needs an org entitlement.
+model_name: Rust Toy OpenAI Server no_build
+model_metadata:
+  example_model_input:
+    model: toy-openai
+    messages:
+      - role: user
+        content: "Say hello"
+    stream: true
+  tags:
+    - openai-compatible
+
+base_image:
+  image: python:3.13-alpine          # smallest accepted base (22MB); python:3.13-slim-bookworm (51MB) also works
+
+docker_server:
+  no_build: true
+  # build_commands don't run under no_build, so chmod the staged binary here:
+  start_command: chmod +x /app/data/toy-openai-server && exec /app/data/toy-openai-server
+  server_port: 8000
+  readiness_endpoint: /health
+  liveness_endpoint: /health
+  predict_endpoint: /v1/chat/completions   # required field, but ignored under no_build (1:1 routing)
+
+resources:
+  accelerator: null
+  cpu: '1'
+  memory: 512Mi
+  use_gpu: false
+
+runtime:
+  predict_concurrency: 32
