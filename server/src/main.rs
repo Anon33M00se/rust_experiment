@@ -21,7 +21,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const MODEL: &str = "toy-openai";
 
 fn main() {
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
+    // Bind the port nginx proxies to (config.yaml `docker_server.server_port`).
+    // NB: we deliberately do NOT read the generic `PORT` env — Baseten injects
+    // PORT=8080 into the container, but in docker_server mode 8080 is owned by
+    // nginx. Use a dedicated, collision-free override instead.
+    let port = std::env::var("TOY_SERVER_PORT").unwrap_or_else(|_| "8000".to_string());
     let addr = format!("0.0.0.0:{port}");
     let listener = TcpListener::bind(&addr).unwrap_or_else(|e| {
         eprintln!("failed to bind {addr}: {e}");
