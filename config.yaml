@@ -1,0 +1,41 @@
+model_name: Rust Toy OpenAI Server
+model_metadata:
+  example_model_input:
+    model: toy-openai
+    messages:
+      - role: user
+        content: "Say hello"
+    stream: true
+  tags:
+    - openai-compatible
+
+# Smallest base image Truss will accept for a custom (docker_server) deployment:
+# Truss renders a fail-fast check requiring a Debian-based image WITH python3 in
+# the range 3.9-3.14 (see base.Dockerfile.jinja in basetenlabs/truss). That rules
+# out alpine / scratch / distroless and bare debian-slim (no python). python:*-slim
+# is the floor. Our Rust binary is static musl, so it needs nothing else at runtime.
+base_image:
+  image: python:3.13-slim-bookworm
+
+# Truss copies ./data into the image at /app/data BEFORE build_commands run, so we
+# can stage the prebuilt static binary there and place it with plain mkdir/cp/chmod.
+build_commands:
+  - mkdir -p /app/bin
+  - cp /app/data/toy-openai-server /app/bin/toy-openai-server
+  - chmod +x /app/bin/toy-openai-server
+
+docker_server:
+  start_command: /app/bin/toy-openai-server
+  readiness_endpoint: /health
+  liveness_endpoint: /health
+  predict_endpoint: /v1/chat/completions
+  server_port: 8000
+
+resources:
+  accelerator: null
+  cpu: '1'
+  memory: 512Mi
+  use_gpu: false
+
+runtime:
+  predict_concurrency: 32

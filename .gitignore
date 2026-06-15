@@ -1,0 +1,2 @@
+# Rust build artifacts — the deployable binary lives in data/ (built by build.sh)
+server/target/

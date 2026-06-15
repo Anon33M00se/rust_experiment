@@ -1,0 +1,15 @@
+[package]
+name = "toy-openai-server"
+version = "0.1.0"
+edition = "2021"
+
+# Dependency-free on purpose: std-only means a tiny, fully static musl binary
+# with zero supply-chain surface and a near-instant build.
+[dependencies]
+
+[profile.release]
+opt-level = "z"   # optimize for size
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
